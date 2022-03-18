@@ -17,7 +17,9 @@ connection.connect((err) => {
   if (err) {
     console.log(`Connection Failed ${err}`)
   } else {
-    console.log(`Database Connected Successfully`)
+    console.log(
+      `Database Connected Successfully at Port ${process.env.DB_PORT}`
+    )
   }
 })
 module.exports = connection
