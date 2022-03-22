@@ -12,15 +12,3 @@ model test {
   name String @db.VarChar(100)
   city String @db.VarChar(100)
 }
-
-model Test1 {
-  id Int @id @default(autoincrement())
-  name String @db.VarChar(100)
-  city String @db.VarChar(100)
-}
-
-model test2 {
-  id   Int    @id @default(autoincrement())
-  name String @db.VarChar(200)
-  city String @db.VarChar(100)
-}
