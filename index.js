@@ -13,27 +13,46 @@ const { PrismaClient } = require('@prisma/client')
 // Prisma client Init
 const { test } = new PrismaClient()
 
-// Get data
+// Get all data
 app.get('/', async (req, res) => {
-  const user = await test.findMany({
-    // where: {
-    //   city: 'swabi',
-    // },
-  })
+  const user = await test.findMany({})
   res.json(user)
 })
 
 // Create Data
-app.post('/user', async (req, res) => {
+app.post('/', async (req, res) => {
   const { name, city } = req.body
   const newUser = await test.create({
     data: {
-      name: name,
-      city: city,
+      name,
+      city,
     },
   })
   res.json(newUser)
-  //   console.log(req.body)
+})
+
+// Delete Data
+app.delete('/:id', async (req, res) => {
+  const params = req.params.id
+  const user = await test.findUnique({
+    where: {
+      id: parseInt(params),
+    },
+  })
+  // // if(params ===)
+
+  if (!user) {
+    return res.status(400).json({
+      msg: 'OOoopsss! User Not Found',
+    })
+  } else {
+    const deleteuser = await test.delete({
+      where: {
+        id: parseInt(params),
+      },
+    })
+    res.json({ msg: 'User Deleted Successfully' })
+  }
 })
 
 // Server Connection
