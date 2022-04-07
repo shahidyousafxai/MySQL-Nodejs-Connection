@@ -1,9 +1,10 @@
 const express = require('express')
-const bodyparser = require('body-parser')
 const session = require('express-session')
-const mysql2 = require('mysql2/promise');
-const MySQLStore = require('express-mysql-session')(session);
-const { check, validationResult } = require('express-validator')
+const mysql2 = require('mysql2/promise')
+const passport = require('passport')
+const { Strategy: LocalStrategy } = require('passport-local')
+const { hash, compare } = require('./auth')
+const MySQLStore = require('express-mysql-session')(session)
 require('./config/db.config')
 require('dotenv').config()
 
@@ -19,53 +20,129 @@ const options = {
   database: process.env.DB_DATABASE,
 }
 const connection = mysql2.createPool(options)
-const sessionStore = new MySQLStore({}, connection);
+const sessionStore = new MySQLStore({}, connection)
 
-// Express Session
+// ----------Prisma Client----------
+const { PrismaClient } = require('@prisma/client')
+
+// ----------Prisma client Init----------
+const { test } = new PrismaClient()
+
+// ----------Express Session----------
 app.use(
   session({
     secret: process.env.SECRET,
     resave: false,
     saveUninitialized: false,
     store: sessionStore,
-    cookie: { maxAge: 30000 },
+    cookie: { maxAge: 24 * 60 * 60 },
   })
 )
 
-// Prisma Client
-const { PrismaClient } = require('@prisma/client')
+// ----------Passport Initail----------
+app.use(passport.initialize())
+app.use(passport.session())
 
-// Prisma client Init
-const { test } = new PrismaClient()
+// ----------Passport verifyCallback----------
+const verifyCallback = async (username, password, done) => {
+  try {
+    const user = await test.findMany({
+      where: {
+        name: username,
+      },
+    })
+    if (!user) {
+      return done(null, false, {
+        msg: 'User Not Found',
+        statusCode: 400,
+      })
+    }
 
-// Get all data
-app.get('/', async (req, res) => {
+    // ----------Passport Password Compare----------
+    const res = await compare(hash, user.password)
+    if (res) {
+      return done(null, user)
+    } else {
+      return done(null, false, {
+        message: 'Invalid Credentials',
+        statusCode: 401,
+      })
+    }
+  } catch (err) {
+    console.error(err.message)
+    return done(err)
+  }
+}
+// ----------Passport LocalStrategy----------
+const strategy = new LocalStrategy(
+  { usernameField: 'name', passwordField: 'password' },
+  verifyCallback
+)
+passport.use(strategy)
+
+// ----------Passport SerializeUser----------
+passport.serializeUser(function (user, done) {
+  done(null, user.id)
+})
+
+// ----------Passport deserializeUser----------
+passport.deserializeUser(function (user, done) {
+  test
+    .findUnique({
+      where: {
+        id: user.id,
+      },
+      select: {
+        id: true,
+        name: true,
+        password: true,
+      },
+    })
+    .then((res) => done(null, res))
+    .catch((err) => done(err))
+})
+
+// ----------Get all data----------
+app.get('/user/:id', async (req, res) => {
   req.session.isAuth = true
-  console.log(req.session)
-  const user = await test.findMany({})
+  const paramid = req.params.id
+  const user = await test.findUnique({
+    where: {
+      id: parseInt(paramid),
+    },
+  })
+  if (user.length === 0) {
+    return res.status(400).json({
+      msg: 'No Users',
+    })
+  }
   res.json(user)
 })
 
-// Create Data
-app.post('/', [(check('name').isAlpha(), check('city').isAlpha())], async (req, res) => {
-  const errors = validationResult(req)
-  
-  if (!errors.isEmpty()) {
-    return res.status(400).json({
-      msg: 'Value Should Not Be Numeric/ Nor It should Countain Numeric values',
-    })
-  }
-  const { name, city } = req.body
+// ----------Create Data----------
+app.post('/', async (req, res) => {
+  const { name, password } = req.body
   const newUser = await test.create({
     data: {
       name,
-      city,
+      password: await hash(password),
     },
   })
   res.json(newUser)
 })
 
-// Delete Data
+// ----------Verify Data----------
+const resObj = {
+  message: 'success',
+}
+app.post('/test', passport.authenticate('local'), async (req, res) => {
+  req.user.id = parseInt(req.user.id)
+  resObj.data = req.user
+  res.status(201)
+  return res.json(resObj)
+})
+
+// ----------Delete Data----------
 app.delete('/:id', async (req, res) => {
   const params = req.params.id
   const user = await test.findUnique({
@@ -88,6 +165,6 @@ app.delete('/:id', async (req, res) => {
   }
 })
 
-// Server Connection
+// ----------Server Connection----------
 const PORT = process.env.SERVER_PORT || 3001
 app.listen(PORT, () => console.log(`Server Connected, Listion on Port ${PORT}`))

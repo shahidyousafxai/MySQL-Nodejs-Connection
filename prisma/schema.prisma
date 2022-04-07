@@ -10,5 +10,5 @@ datasource db {
 model test {
   id   Int    @id @default(autoincrement())
   name String @db.VarChar(100)
-  city String @db.VarChar(100)
+  password String @db.VarChar(100)
 }
