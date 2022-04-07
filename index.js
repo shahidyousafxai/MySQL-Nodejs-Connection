@@ -3,10 +3,11 @@ const session = require('express-session')
 const mysql2 = require('mysql2/promise')
 const passport = require('passport')
 const { Strategy: LocalStrategy } = require('passport-local')
-const { hash, compare } = require('./auth')
+const { hash } = require('./auth')
 const MySQLStore = require('express-mysql-session')(session)
 require('./config/db.config')
 require('dotenv').config()
+const bcrypt = require('bcrypt')
 
 const app = express()
 app.use(express.json())
@@ -59,7 +60,7 @@ const verifyCallback = async (username, password, done) => {
     }
 
     // ----------Passport Password Compare----------
-    const res = await compare(hash, user.password)
+    const res = await bcrypt.compare(password, user[0].password)
     if (res) {
       return done(null, user)
     } else {
@@ -81,25 +82,49 @@ const strategy = new LocalStrategy(
 passport.use(strategy)
 
 // ----------Passport SerializeUser----------
-passport.serializeUser(function (user, done) {
-  done(null, user.id)
-})
+// passport.serializeUser(function (user, done) {
+//   done(null, user.id)
+// })
 
 // ----------Passport deserializeUser----------
-passport.deserializeUser(function (user, done) {
-  test
-    .findUnique({
-      where: {
-        id: user.id,
-      },
-      select: {
-        id: true,
-        name: true,
-        password: true,
-      },
+// passport.deserializeUser(function (user, done) {
+//   test
+//     .findUnique({
+//       where: {
+//         id: user.id,
+//       },
+//       select: {
+//         id: true,
+//         name: true,
+//         password: true,
+//       },
+//     })
+//     .then((res) => done(null, res))
+//     .catch((err) => done(err))
+// })
+
+passport.serializeUser(function (user, cb) {
+  process.nextTick(function () {
+    cb(null, { id: user.id, username: user.name })
+  })
+})
+
+passport.deserializeUser(function (user, cb) {
+  process.nextTick(function () {
+    return cb(null, user)
+  })
+})
+
+// ----------Get all data----------
+app.get('/user', async (req, res) => {
+  req.session.isAuth = true
+  const user = await test.findMany({})
+  if (user.length === 0) {
+    return res.status(400).json({
+      msg: 'No Users Found',
     })
-    .then((res) => done(null, res))
-    .catch((err) => done(err))
+  }
+  res.json(user)
 })
 
 // ----------Get all data----------
@@ -111,12 +136,13 @@ app.get('/user/:id', async (req, res) => {
       id: parseInt(paramid),
     },
   })
-  if (user.length === 0) {
+  if (user === null) {
     return res.status(400).json({
-      msg: 'No Users',
+      msg: 'No User Found',
     })
   }
   res.json(user)
+  console.log(user)
 })
 
 // ----------Create Data----------
